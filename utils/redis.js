@@ -1,60 +1,63 @@
-/* eslint-disable import/no-named-as-default */
-/* eslint-disable no-unused-vars */
-import sha1 from 'sha1';
-import { Request } from 'express';
-import mongoDBCore from 'mongodb/lib/core';
-import dbClient from './db';
-import redisClient from './redis';
+import { promisify } from 'util';
+import { createClient } from 'redis';
 
 /**
- * Fetches the user from the Authorization header in the given request object.
- * @param {Request} req The Express request object.
- * @returns {Promise<{_id: ObjectId, email: string, password: string}>}
+ * Represents a Redis client.
  */
-export const getUserFromAuthorization = async (req) => {
-  const authHeader = req.headers.authorization || null;
-
-  if (!authHeader) {
-    return null;
+class RedisClient {
+  /**
+   * Creates a new RedisClient instance.
+   */
+  constructor() {
+    this.redis = createClient();
+    this.connected = true;
+    this.redis.on('error', (error) => {
+      console.error('Redis client failed to connect:', error.message || error.toString());
+      this.connected = false;
+    });
+    this.redis.on('connect', () => {
+      this.connected = true;
+    });
   }
-  const authParts = authHeader.split(' ');
 
-  if (authParts.length !== 2 || authParts[0] !== 'Basic') {
-    return null;
+  /**
+   * Checks if this client's connection to the Redis server is active.
+   * @returns {boolean}
+   */
+  isAlive() {
+    return this.connected;
   }
-  const decodedToken = Buffer.from(authParts[1], 'base64').toString();
-  const separatorPosition = decodedToken.indexOf(':');
-  const userEmail = decodedToken.substring(0, separatorPosition);
-  const userPassword = decodedToken.substring(separatorPosition + 1);
-  const userData = await (await dbClient.usersCollection()).findOne({ email: userEmail });
 
-  if (!userData || sha1(userPassword) !== userData.password) {
-    return null;
+  /**
+   * Retrieves the value of a given key.
+   * @param {String} key The key of the item to retrieve.
+   * @returns {String | Object}
+   */
+  async get(key) {
+    return promisify(this.redis.GET).bind(this.redis)(key);
   }
-  return userData;
-};
 
-/**
- * Fetches the user from the X-Token header in the given request object.
- * @param {Request} req The Express request object.
- * @returns {Promise<{_id: ObjectId, email: string, password: string}>}
- */
-export const getUserFromXToken = async (req) => {
-  const authToken = req.headers['x-token'];
-
-  if (!authToken) {
-    return null;
+  /**
+   * Stores a key and its value along with an expiration time.
+   * @param {String} key The key of the item to store.
+   * @param {String | Number | Boolean} value The item to store.
+   * @param {Number} duration The expiration time of the item in seconds.
+   * @returns {Promise<void>}
+   */
+  async set(key, value, duration) {
+    await promisify(this.redis.SETEX)
+      .bind(this.redis)(key, duration, value);
   }
-  const userIdFromRedis = await redisClient.get(`auth_${authToken}`);
-  if (!userIdFromRedis) {
-    return null;
-  }
-  const userData = await (await dbClient.usersCollection())
-    .findOne({ _id: new mongoDBCore.BSON.ObjectId(userIdFromRedis) });
-  return userData || null;
-};
 
-export default {
-  getUserFromAuthorization: async (req) => getUserFromAuthorization(req),
-  getUserFromXToken: async (req) => getUserFromXToken(req),
-};
+  /**
+   * Removes the value of a given key.
+   * @param {String} key The key of the item to remove.
+   * @returns {Promise<void>}
+   */
+  async del(key) {
+    await promisify(this.redis.DEL).bind(this.redis)(key);
+  }
+}
+
+export const redisClient = new RedisClient();
+export default redisClient;
