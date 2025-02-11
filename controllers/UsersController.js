@@ -1,46 +1,40 @@
+/* eslint-disable import/no-named-as-default */
 import sha1 from 'sha1';
-import { ObjectId } from 'mongodb';
+import Queue from 'bull/lib/queue';
 import dbClient from '../utils/db';
 
-class UsersController {
+const userQueue = new Queue('email sending');
+
+export default class UsersController {
   static async postNew(req, res) {
-    const { email, password } = req.body;
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
 
-    // Check if email is missing
     if (!email) {
-      return res.status(400).json({ error: 'Missing email' });
+      res.status(400).json({ error: 'Missing email' });
+      return;
     }
-
-    // Check if password is missing
     if (!password) {
-      return res.status(400).json({ error: 'Missing password' });
+      res.status(400).json({ error: 'Missing password' });
+      return;
     }
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    // Check if email already exists in the database
-    const usersCollection = dbClient.client.db().collection('users');
-    const userExists = await usersCollection.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ error: 'Already exist' });
+    if (user) {
+      res.status(400).json({ error: 'Already exist' });
+      return;
     }
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
-    // Hash the password using SHA1
-    const hashedPassword = sha1(password);
+    userQueue.add({ userId });
+    res.status(201).json({ email, id: userId });
+  }
 
-    // Create a new user object
-    const newUser = {
-      email,
-      password: hashedPassword,
-    };
+  static async getMe(req, res) {
+    const { user } = req;
 
-    // Insert the new user into the database
-    const result = await usersCollection.insertOne(newUser);
-
-    // Return the new user with only email and id
-    return res.status(201).json({
-      id: result.insertedId,
-      email,
-    });
+    res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }
-
-export default UsersController;
