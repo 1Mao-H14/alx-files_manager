@@ -4,22 +4,23 @@ import Collection from 'mongodb/lib/collection';
 import envLoader from './env_loader';
 
 /**
- * A MongoDB client for interacting with the database.
+ * A client for interacting with a MongoDB database.
+ * Handles connections and provides methods to access collections.
  */
 class DBClient {
   /**
-   * Initializes a new instance of the DBClient.
-   * Loads environment variables and establishes a connection to the MongoDB server.
+   * Initializes the DBClient.
+   * Loads environment variables and sets up a connection to the MongoDB server.
    */
   constructor() {
     envLoader();
-    const dbHost = process.env.DB_HOST || 'localhost'; // Database host (default: localhost)
-    const dbPort = process.env.DB_PORT || 27017; // Database port (default: 27017)
-    const dbName = process.env.DB_DATABASE || 'files_manager'; // Database name (default: files_manager)
-    const connectionString = `mongodb://${dbHost}:${dbPort}/${dbName}`; // MongoDB connection string
+    const host = process.env.DB_HOST || 'localhost'; // MongoDB server host
+    const port = process.env.DB_PORT || 27017; // MongoDB server port
+    const databaseName = process.env.DB_DATABASE || 'files_manager'; // Database name
+    const connectionURI = `mongodb://${host}:${port}/${databaseName}`; // Full connection URI
 
-    this.dbClient = new mongodb.MongoClient(connectionString, { useUnifiedTopology: true });
-    this.dbClient.connect(); // Connect to the MongoDB server
+    this.mongoClient = new mongodb.MongoClient(connectionURI, { useUnifiedTopology: true });
+    this.mongoClient.connect(); // Establish connection to MongoDB
   }
 
   /**
@@ -27,39 +28,39 @@ class DBClient {
    * @returns {boolean} True if connected, otherwise false.
    */
   isAlive() {
-    return this.dbClient.isConnected();
+    return this.mongoClient.isConnected();
   }
 
   /**
-   * Retrieves the total number of users in the 'users' collection.
-   * @returns {Promise<number>} The number of users.
+   * Counts the number of documents in the 'users' collection.
+   * @returns {Promise<number>} The total number of users.
    */
   async nbUsers() {
-    return this.dbClient.db().collection('users').countDocuments();
+    return this.mongoClient.db().collection('users').countDocuments();
   }
 
   /**
-   * Retrieves the total number of files in the 'files' collection.
-   * @returns {Promise<number>} The number of files.
+   * Counts the number of documents in the 'files' collection.
+   * @returns {Promise<number>} The total number of files.
    */
   async nbFiles() {
-    return this.dbClient.db().collection('files').countDocuments();
+    return this.mongoClient.db().collection('files').countDocuments();
   }
 
   /**
-   * Retrieves a reference to the 'users' collection.
-   * @returns {Promise<Collection>} The 'users' collection.
+   * Retrieves the 'users' collection from the database.
+   * @returns {Promise<Collection>} A reference to the 'users' collection.
    */
   async usersCollection() {
-    return this.dbClient.db().collection('users');
+    return this.mongoClient.db().collection('users');
   }
 
   /**
-   * Retrieves a reference to the 'files' collection.
-   * @returns {Promise<Collection>} The 'files' collection.
+   * Retrieves the 'files' collection from the database.
+   * @returns {Promise<Collection>} A reference to the 'files' collection.
    */
   async filesCollection() {
-    return this.dbClient.db().collection('files');
+    return this.mongoClient.db().collection('files');
   }
 }
 
